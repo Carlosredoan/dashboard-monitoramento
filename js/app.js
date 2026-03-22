@@ -3,7 +3,8 @@ const servers = [
     { id: 'srv-01', name: 'Cluster Principal (Swarm)', ip: '192.164.1.10', type: 'Production' },
     { id: 'srv-02', name: 'Banco de Dados (Oracle)', ip: '10.0.0.5', type: 'Database' },
     { id: 'srv-03', name: 'API de Automação (n8n)', ip: '192.164.1.25', type: 'Service' },
-    { id: 'srv-04', name: 'Servidor de Testes', ip: '127.0.0.1', type: 'Staging' }
+    { id: 'srv-04', name: 'Servidor de Testes', ip: '127.0.0.1', type: 'Staging' },
+    { id: 'srv-05', name: 'Backup (AWS S3)', ip: '54.231.16.1', type: 'Backup' }
 ];
 
 // 2. Função para simular o tráfego de rede e uso de CPU (Gera dados falsos realistas)
