@@ -1,97 +1,95 @@
-// 1. Estado da Aplicação (Configurações simulando um banco de dados)
+// 1. Configuração dos Servidores (Mantemos sua lista para a interface)
 const servers = [
-    { id: 'srv-01', name: 'Cluster Principal (Swarm)', ip: '192.164.1.10', type: 'Production' },
+    { id: 'gh-01', name: 'GitHub Services', type: 'External API' },
     { id: 'srv-02', name: 'Banco de Dados (Oracle)', ip: '10.0.0.5', type: 'Database' },
     { id: 'srv-03', name: 'API de Automação (n8n)', ip: '192.164.1.25', type: 'Service' },
-    { id: 'srv-04', name: 'Servidor de Testes', ip: '127.0.0.1', type: 'Staging' },
-    { id: 'srv-05', name: 'Backup (AWS S3)', ip: '54.231.16.1', type: 'Backup' }
 ];
 
-// 2. Função para simular o tráfego de rede e uso de CPU (Gera dados falsos realistas)
-const fetchServerMetrics = async () => {
-    // Simula um delay de rede (como se estivesse buscando da nuvem)
-    return new Promise((resolve) => {
-        setTimeout(() => {
-            const metrics = servers.map(server => {
-                // Sorteia números para simular carga
-                const cpuUsage = Math.floor(Math.random() * 100);
-                const ramUsage = (Math.random() * 16).toFixed(1);
-                
-                // Define o status baseado na CPU
-                let status = 'online';
-                if (cpuUsage > 85) status = 'warning';
-                if (cpuUsage > 95) status = 'offline';
+// 2. A "Antena": Busca o status real do GitHub via Fetch API
+async function getGitHubStatus() {
+    try {
+        // O fetch vai até o servidor do GitHub buscar o JSON de status
+        const response = await fetch('https://www.githubstatus.com/api/v2/status.json');
+        const data = await response.json();
+        
+        // Traduzimos o 'indicator' do GitHub para o nosso sistema de cores
+        // 'none' significa que está tudo bem (Operante)
+        return {
+            descricao: data.status.description,
+            status: data.status.indicator === 'none' ? 'online' : 'warning'
+        };
+    } catch (error) {
+        console.error("Erro na telemetria:", error);
+        return { descricao: "Sem conexão com API", status: 'offline' };
+    }
+}
 
-                return { ...server, cpuUsage, ramUsage, status };
-            });
-            resolve(metrics);
-        }, 500); // 500ms de delay
-    });
-};
-
-// 3. Função que cria o HTML do cartão (Usa Template Strings avançadas)
-const createServerCard = (serverData) => {
-    const { name, ip, cpuUsage, ramUsage, status } = serverData; // Destructuring
+// 3. O "Pincel": Cria o HTML do card (mesma lógica que você já tinha)
+const createServerCard = (server, realData = null) => {
+    // Se tivermos dados reais (do GitHub), usamos eles. Se não, usamos valores padrão.
+    const statusText = realData 
+        ? (realData.status === 'online' ? 'Operante' : 'Alerta')
+        : 'Processando...';
     
-    // Converte o status para o texto que vai aparecer na tela
-    const statusText = status === 'online' ? 'Operante' : status === 'warning' ? 'Alerta' : 'Falha';
+    const displayStatus = realData ? realData.status : 'offline';
+    const description = realData ? realData.description : 'Sincronizando dados...';
 
     return `
         <article class="server-card">
             <div class="card-header">
-                <h2>${name}</h2>
-                <span class="status-badge ${status}">${statusText}</span>
+                <h2>${server.name}</h2>
+                <span class="status-badge ${displayStatus}">${statusText}</span>
             </div>
             <div class="card-body">
                 <div class="metric">
-                    <span class="metric-label">Endereço IP</span>
-                    <span class="metric-value">${ip}</span>
+                    <span class="metric-label">Provedor</span>
+                    <span class="metric-value">${server.type}</span>
                 </div>
                 <div class="metric">
-                    <span class="metric-label">Uso de CPU</span>
-                    <span class="metric-value" style="color: ${cpuUsage > 85 ? 'var(--danger)' : 'inherit'}">
-                        ${cpuUsage}%
-                    </span>
-                </div>
-                <div class="metric">
-                    <span class="metric-label">Uso de RAM</span>
-                    <span class="metric-value">${ramUsage} GB / 16 GB</span>
+                    <span class="metric-label">Status da Rede</span>
+                    <span class="metric-value">${description}</span>
                 </div>
             </div>
         </article>
     `;
 };
 
-// 4. Função Principal (Controller) - Atualiza a tela
+// 4. O "Cérebro": Atualiza o Dashboard
 const updateDashboard = async () => {
     const gridContainer = document.getElementById('server-grid');
     const globalStatus = document.getElementById('global-status');
     
     try {
-        globalStatus.textContent = 'Atualizando métricas...';
+        globalStatus.textContent = 'Consultando APIs externas...';
         
-        // Busca os dados (espera a Promise resolver)
-        const metrics = await fetchServerMetrics();
+        // Buscamos o dado real do GitHub
+        const ghRealData = await getGitHubStatus();
         
-        // Transforma a lista de dados em código HTML e junta tudo num texto só
-        const htmlContent = metrics.map(createServerCard).join('');
+        // Geramos o HTML. O primeiro card recebe os dados reais!
+        const htmlContent = servers.map((server, index) => {
+            if (index === 0) {
+                return createServerCard(server, { 
+                    status: ghRealData.status, 
+                    description: ghRealData.descricao 
+                });
+            }
+            // Os outros cards ficam como estáticos por enquanto
+            return createServerCard(server, { status: 'online', description: 'Sistema estável' });
+        }).join('');
         
-        // Injeta o HTML gerado na tela de uma vez só (melhor para performance)
         gridContainer.innerHTML = htmlContent;
-        globalStatus.textContent = 'Sistemas Operantes';
+        globalStatus.textContent = 'Monitoramento Ativo';
+        globalStatus.style.color = 'var(--success)';
 
     } catch (error) {
-        console.error('Erro ao buscar métricas da infraestrutura:', error);
-        globalStatus.textContent = 'Erro de Conexão';
+        globalStatus.textContent = 'Erro no Dashboard';
         globalStatus.style.color = 'var(--danger)';
     }
 };
 
 // 5. Inicialização
-// Executa a primeira vez assim que a página carregar
 document.addEventListener('DOMContentLoaded', () => {
     updateDashboard();
-    
-    // Define um ciclo infinito para atualizar os dados a cada 3 segundos
-    setInterval(updateDashboard, 3000);
+    // Atualiza a cada 1 minuto (60000ms) para respeitar os limites da API
+    setInterval(updateDashboard, 60000);
 });
